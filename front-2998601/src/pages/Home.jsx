@@ -7,6 +7,8 @@ function Home() {
     <Page>
         <h1>Home</h1>
         <Welcome />
+
+        
     </Page>
 
     )

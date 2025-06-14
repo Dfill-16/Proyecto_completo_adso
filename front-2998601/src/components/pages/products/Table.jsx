@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Table as Btable, Button} from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
-import { destroy } from "../../../services/products/destroy";
+import destroy  from "../../../services/products/destroy";
 
 function Table({ products, onItemDelete }) {
     const [deleting, setDeleting] = useState(false);
@@ -11,7 +11,7 @@ function Table({ products, onItemDelete }) {
     const handleDelete = (id) => {
         setDeleting(true);
         
-        destroy(id).then((data) => {
+        destroy(id).then(() => {
             if(onItemDelete){ 
                 onItemDelete() 
             } 
@@ -37,7 +37,7 @@ function Table({ products, onItemDelete }) {
                 </tr>
             </thead>
             <tbody>
-                {products.map((product) =>{
+                {products?.data?.map((product) =>{
                     const { sku, name, unit, ammount } = product;
                     return (
                         <tr key={product.id}>

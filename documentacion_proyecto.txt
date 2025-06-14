@@ -1,0 +1,581 @@
+
+===== MODELOS LARAVEL =====
+
+
+---- backend-2998601\app\Models\products.php ----
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class products extends Model
+{
+    use HasFactory;
+    
+    public function movements():HasMany{
+        return $this->hasMany(movements::class);
+    }
+}
+
+---- backend-2998601\app\Models\movements.php ----
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class movements extends Model
+{
+    use HasFactory;
+
+    public const TYPE_IN = 'entrada';
+    public const TYPE_OUT = 'salida';
+    public const TYPE_RETURN = 'devolucion';
+
+    public function products():BelongsTo{
+        return $this->belongsTo(products::class);
+    }
+
+    public static function getTypeOptions(){
+        return [
+            self::TYPE_IN,
+            self::TYPE_OUT,
+            self::TYPE_RETURN
+        ];
+    }
+}
+
+===== CONTROLADORES API =====
+
+
+---- backend-2998601\app\Http\Controllers\Api\MovementController.php ----
+
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\movements;
+use App\Models\products;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+class MovementController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     */
+    public function index()
+    {
+        $movements = movements::with('products')->get();
+        return response()->json(['data' => $movements]);
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store(Request $request)
+    {
+        // dd($request->all(), movements::getTypeOptions());
+
+        if (!in_array($request->type, movements::getTypeOptions())) {
+            return response()->json([
+                'error' => 'El movimiento que trata de hacer es inválido'
+            ], 400);
+        }
+
+        $product = products::findorFail($request->product_id);
+
+        if ($request->ammount <= 0) {
+            return response()->json([
+                'error' => 'La cantidad debe ser mayor a 0'
+            ], 400);
+        }
+
+        if ($request->type === movements::TYPE_OUT && $request->ammount > $product->ammount) {
+            return response()->json([
+                'error' => 'Cantidad insuficiente en el inventario'
+            ], 400);
+        }
+        
+        DB::beginTransaction();
+        try {
+            $movement = new movements();
+            $movement->product_id = $product->id;
+            $movement->ammount = $request->ammount;
+            $movement->type = $request->type;
+
+            switch ($request->type) {
+                case movements::TYPE_IN:
+                case movements::TYPE_RETURN:
+                    $product->ammount += $request->ammount;
+                    break;
+                case movements::TYPE_OUT:
+                    $product->ammount -= $request->ammount;
+                    break;
+            }
+
+            $movement->save();
+            $product->save();
+            DB::commit();
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'error' => 'Error al realizar el movimiento: ' . $e->getMessage()
+            ], 400);
+        }
+
+        
+        $movement->save();
+
+        return response()->json([
+            'data' => $movement
+        ]);
+    }
+
+    /**
+     * Display the specified resource.
+     */
+    public function show(movements $movement)
+    {
+        return response()->json(['data' => $movement]);
+    }
+    
+
+    /**
+     * Update the specified resource in storage.
+     */
+    public function update(Request $request, string $id)
+    {
+        //
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     */
+    public function destroy(string $id)
+    {
+        //
+    }
+}
+
+---- backend-2998601\app\Http\Controllers\Api\ProductController.php ----
+
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\products;
+use Illuminate\Http\Request;
+
+class ProductController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     */
+    public function index()
+    {
+        $products = products::all();
+        return response()->json(['data'=>$products]);
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store(Request $request)
+    {
+        $product = new products();
+
+        $product->sku = $request->sku;
+        $product->name = $request->name;
+        $product->unit = $request->unit;
+        $product->ammount = $request->ammount;
+        $product->save();
+
+        return response()->json([
+            'data' =>$product
+        ]);
+    }
+
+    /**
+     * Display the specified resource.
+     */
+    public function show(products $product)
+    {
+        return response()->json(['data'=>$product]);
+    }
+    
+    /**
+     * Update the specified resource in storage.
+     */
+    public function update(Request $request, products $product)
+    {
+        $product->sku = $request->sku;
+        $product->name = $request->name;
+        $product->unit = $request->unit;
+        $product->ammount = $request->ammount;
+        $product->save();
+
+        return response()->json([
+            'data' =>$product
+        ]);
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     */
+    public function destroy(products $product) 
+    {
+        $product->delete();
+        return response()->json(['data'=>$product]);
+    }
+}
+
+---- backend-2998601\app\Http\Controllers\Api\MovementsController.php ----
+
+
+---- backend-2998601\app\Http\Controllers\Api\ProductsController.php ----
+
+
+===== FRONTEND SRC =====
+
+
+---- D:\Proyecto_completo_adso\front-2998601\src\components\pages\home\Welcome.jsx ----
+
+function Welcome() {
+    return(
+        <div>
+            <p>Bienvenido a la aplicación de productos</p>
+        </div>
+    )
+}
+
+export default Welcome
+
+---- D:\Proyecto_completo_adso\front-2998601\src\components\pages\products\Table.jsx ----
+
+import { useState } from "react";
+import { Table as Btable, Button} from "react-bootstrap";
+import { useNavigate } from "react-router-dom";
+import { destroy } from "../../../services/products/destroy";
+
+function Table({ products, onItemDelete }) {
+    const [deleting, setDeleting] = useState(false);
+
+    const navigate = useNavigate();
+
+    const handleDelete = (id) => {
+        setDeleting(true);
+        
+        destroy(id).then((data) => {
+            if(onItemDelete){ 
+                onItemDelete() 
+            } 
+        }). finally(() => {
+            setDeleting(false);
+
+        })
+    }
+
+    const handleClickUpdate = (id) => {
+        navigate(`/products/edit/${id}`);
+    }
+
+    return (
+        <Btable striped bordered hover>
+            <thead>
+                <tr>
+                    <th>SKU</th>
+                    <th>Nombre</th>
+                    <th>Unidad</th>
+                    <th>Cantidad</th>
+                    <th>Opciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {products.map((product) =>{
+                    const { sku, name, unit, ammount } = product;
+                    return (
+                        <tr key={product.id}>
+                            <td>{sku}</td>
+                            <td>{name}</td>
+                            <td>{unit}</td>
+                            <td>{ammount}</td>
+                            <td>
+                                <Button variant="danger" size = "sm" onClick={() => handleDelete(product.id)} disabled={deleting}>Eliminar</Button>
+                                <Button variant="primary" size="sm" onClick={() => handleClickUpdate(product.id)}>Editar</Button>
+                            </td>
+                        </tr>
+                    )
+                })}
+            </tbody>
+        </Btable>
+    )
+}
+
+export default Table;
+
+---- D:\Proyecto_completo_adso\front-2998601\src\components\shared\Footer.jsx ----
+
+import {Link} from 'react-router-dom'
+
+function Footer() {
+    return (
+        <>
+            <footer>
+                <p>© 2023 Adso. Todos los derechos reservados.<Link to="" className="cta">Política de privacidad</Link></p>
+            </footer>
+        </>
+    )
+}
+
+export default Footer
+
+---- D:\Proyecto_completo_adso\front-2998601\src\components\shared\Page.jsx ----
+
+import { Container, Nav, Navbar } from 'react-bootstrap'
+import { Link } from 'react-router-dom'
+import Footer from './Footer'
+
+function Page({ children }) {
+
+    return (
+        <>
+            <Navbar expand="lg" className='bg-body-tertiary'>
+                <Container>
+                    <Navbar.Brand>Inventario de productos</Navbar.Brand>
+                    <Navbar.Toggle aria-controls="basic-navbar-nav" />
+                    <Navbar.Collapse id="basic-navbar-nav">
+                            <Nav className="me-auto">
+                                <Link to="/" className="nav-link">Home</Link>
+                                <Link to="/products" className="nav-link">Productos</Link>
+                                <Link to="/movements" className="nav-link">Movimientos</Link> 
+                            </Nav>
+                    </Navbar.Collapse>
+                </Container>
+            </Navbar>
+            <Container>
+                {children}
+            </Container>
+            <Footer />
+        </>
+    )
+}
+
+export default Page
+
+---- D:\Proyecto_completo_adso\front-2998601\src\pages\Home.jsx ----
+
+import Welcome from '../components/pages/home/Welcome'
+import Page from '../components/shared/Page'
+
+function Home() {
+
+    return (
+    <Page>
+        <h1>Home</h1>
+        <Welcome />
+    </Page>
+
+    )
+}
+
+export default Home
+
+---- D:\Proyecto_completo_adso\front-2998601\src\services\movements\create.js ----
+
+async function create(product) {
+    const response = await fetch('http://localhost:8000/api/movements/', {
+        method: 'POST',
+        headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+
+        body: JSON.stringify(product)
+    })
+
+    const data = await response.json()
+    return data
+}
+
+export default create
+
+---- D:\Proyecto_completo_adso\front-2998601\src\services\movements\getAll.js ----
+
+async function getAll() {
+    const response = await fetch('http://localhost:8000/api/movements/', {
+        method: 'GET',
+        headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+    })
+
+    const data = await response.json()
+    return data
+}
+
+export default getAll
+
+---- D:\Proyecto_completo_adso\front-2998601\src\services\movements\getOne.js ----
+
+async function getOne(id) {
+    const response = await fetch(`http://localhost:8000/api/movements/${id}`, {
+        method: 'GET',
+        headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+    })
+
+    const data = await response.json()
+    return data
+}
+
+export default getOne
+
+---- D:\Proyecto_completo_adso\front-2998601\src\services\products\create.js ----
+
+async function create(product) {
+    const response = await fetch('http://localhost:8000/api/products/', {
+        method: 'POST',
+        headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+
+        body: JSON.stringify(product)
+    })
+
+    const data = await response.json()
+    return data
+}
+
+export default create
+
+---- D:\Proyecto_completo_adso\front-2998601\src\services\products\destroy.js ----
+
+async function destroy(id) {
+    const response = await fetch(`http://localhost:8000/api/products/${id}`, {
+        method: 'DELETE',
+        headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    })
+
+    const data = await response.json()
+    return data.data
+}
+
+export default destroy
+
+---- D:\Proyecto_completo_adso\front-2998601\src\services\products\getAll.js ----
+
+async function getAll() {
+    const response = await fetch('http://localhost:8000/api/products/', {
+        method: 'GET',
+        headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+    })
+
+    const data = await response.json()
+    return data
+}
+
+export default getAll
+
+---- D:\Proyecto_completo_adso\front-2998601\src\services\products\getOne.js ----
+
+async function getOne(id) {
+    const response = await fetch(`http://localhost:8000/api/products/${id}`, {
+        method: 'GET',
+        headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+    })
+
+    const data = await response.json()
+    return data
+}
+
+export default getOne
+
+---- D:\Proyecto_completo_adso\front-2998601\src\services\products\update.js ----
+
+async function update(product, id) {
+    const response = await fetch(`http://localhost:8000/api/products/${id}`, {
+        method: 'PUT',
+        headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+
+        body: JSON.stringify(product)
+    })
+
+    const data = await response.json()
+    return data
+}
+
+export default update
+
+---- D:\Proyecto_completo_adso\front-2998601\src\App.jsx ----
+
+import "bootstrap/dist/css/bootstrap.min.css";
+import Router from './Router'
+
+function App() {
+
+  return (
+    <Router />
+  )
+}
+
+export default App
+
+---- D:\Proyecto_completo_adso\front-2998601\src\main.jsx ----
+
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import App from './App.jsx'
+
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)
+
+---- D:\Proyecto_completo_adso\front-2998601\src\Router.jsx ----
+
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+import Home from "./pages/Home";
+import Table from "./components/pages/products/Table";
+
+function Router() {
+    return(
+        <BrowserRouter>
+            <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/products" element={<Table />} />
+            </Routes>
+        </BrowserRouter>
+    )
+}
+
+export default Router
